@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        #status {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #555;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            gap: 5px;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background-color: #fff;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        .cell:hover {
+            background-color: #e0e0e0;
+            transform: scale(1.05);
+        }
+
+        .cell.taken {
+            cursor: not-allowed;
+            background-color: #ddd;
+        }
+
+        .cell.taken:hover {
+            background-color: #ddd;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tic-Tac-Toe</h1>
+    <div id="status">Connecting...</div>
+    <div id="gameBoard" class="board"></div>
+
+    <script>
+        const gameBoard = document.getElementById('gameBoard');
+        const status = document.getElementById('status');
+        const ws = new WebSocket('ws://localhost:8080');
+
+        let player = null;
+        let board = Array(9).fill(null);
+        let turn = 0;
+
+        ws.onopen = () => {
+            status.textContent = 'Connected to the server. Waiting for another player...';
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            if (data.player !== undefined) {
+                player = data.player;
+                status.textContent = `You are Player ${player === 0 ? 'X' : 'O'}`;
+            }
+
+            if (data.message) {
+                status.textContent = data.message;
+            }
+
+            if (data.board) {
+                board = data.board;
+                turn = data.turn;
+                updateBoard();
+                status.textContent += turn === player ? ' Your turn.' : ' Opponent\'s turn.';
+            }
+        };
+
+        function updateBoard() {
+            gameBoard.innerHTML = '';
+            board.forEach((cell, index) => {
+                const cellElement = document.createElement('div');
+                cellElement.className = 'cell';
+                if (cell !== null) cellElement.classList.add('taken');
+                cellElement.textContent = cell === 0 ? 'X' : cell === 1 ? 'O' : '';
+                cellElement.onclick = () => handleCellClick(index);
+                gameBoard.appendChild(cellElement);
+            });
+        }
+
+        function handleCellClick(index) {
+            if (board[index] !== null || turn !== player) return;
+            ws.send(index);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "name": "orchid/socket",
+  "description": "Laravel library for asynchronously serving WebSockets. ",
+  "keywords": [
+    "framework",
+    "laravel",
+    "web",
+    "websocket",
+    "socket",
+    "php",
+    "server"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "tabuna",
+      "email": "bliz48rus@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.5.9",
+    "cboden/ratchet": "^0.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Orchid\\Socket\\": "src/"
+    }
+  },
+  "extra": {
+      "laravel": {
+          "providers": [
+              "Orchid\\Socket\\Providers\\SocketServiceProvider"
+          ]
+      }
+  },
+  "prefer-stable": true
+}
