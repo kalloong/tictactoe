@@ -72,40 +72,45 @@
         const gameBoard = document.getElementById('gameBoard');
         const status = document.getElementById('status');
         const ws = new WebSocket('ws://localhost:8080');
-
         let player = null;
         let board = Array(9).fill(null);
         let turn = 0;
-
+        let gameOver = false; // Track if the game is over
+    
         ws.onopen = () => {
             status.textContent = 'Connected to the server. Waiting for another player...';
         };
-
+    
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
+    
             if (data.error) {
                 alert(data.error);
                 return;
             }
-
+    
             if (data.player !== undefined) {
                 player = data.player;
                 status.textContent = `You are Player ${player === 0 ? 'X' : 'O'}`;
             }
-
+    
             if (data.message) {
                 status.textContent = data.message;
             }
-
+    
             if (data.board) {
                 board = data.board;
                 turn = data.turn;
                 updateBoard();
                 status.textContent += turn === player ? ' Your turn.' : ' Opponent\'s turn.';
             }
+    
+            if (data.message && data.message === 'Draw!' || data.message.includes('wins')) {
+                gameOver = true;
+                showRematchButton();
+            }
         };
-
+    
         function updateBoard() {
             gameBoard.innerHTML = '';
             board.forEach((cell, index) => {
@@ -117,11 +122,23 @@
                 gameBoard.appendChild(cellElement);
             });
         }
-
+    
         function handleCellClick(index) {
-            if (board[index] !== null || turn !== player) return;
+            if (gameOver || board[index] !== null || turn !== player) return;
             ws.send(index);
         }
+    
+        function showRematchButton() {
+            const rematchButton = document.createElement('button');
+            rematchButton.textContent = 'Rematch';
+            rematchButton.onclick = () => {
+                // Send message to reset game, restart the board
+                gameOver = false;
+                ws.send('rematch'); 
+            };
+            document.body.appendChild(rematchButton);
+        }
     </script>
+    
 </body>
 </html>
