@@ -23,9 +23,8 @@ class TicTacToeServer implements MessageComponentInterface {
 
     public function onOpen(ConnectionInterface $conn) {
         if ($this->clients->count() >= 2) {
-            $conn->send(json_encode(['error' => 'Game is full!']));
-            $conn->close();
-            return;
+            $conn->send(json_encode(['error' => 'Game is full! You can wait for the next game.']));
+            return; // Do not close the connection, just return
         }
 
         $this->clients->attach($conn);
@@ -42,6 +41,11 @@ class TicTacToeServer implements MessageComponentInterface {
 
     public function onMessage(ConnectionInterface $from, $msg) {
         $player = $this->playerMap[$from->resourceId] ?? null;
+
+        if ($player === null || $this->clients->count() < 2) {
+            $from->send(json_encode(['error' => 'Game is not currently active.']));
+            return;
+        }
 
         if ($player !== $this->turn) {
             $from->send(json_encode(['error' => 'Not your turn!']));
@@ -63,7 +67,7 @@ class TicTacToeServer implements MessageComponentInterface {
             $this->broadcast(['message' => "Player {$player} wins!"]);
             $this->resetGame();
         } elseif (!in_array(null, $this->board)) {
-            $this->broadcast(['message' => 'Draw!']);
+            $this->broadcast(['message' => 'The game is a draw!']);
             $this->resetGame();
         }
     }
@@ -95,7 +99,7 @@ class TicTacToeServer implements MessageComponentInterface {
     private function checkWin($player) {
         $winningCombos = [
             [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+            [0, 3 , 6], [1, 4, 7], [2, 5, 8], // Columns
             [0, 4, 8], [2, 4, 6]            // Diagonals
         ];
 
