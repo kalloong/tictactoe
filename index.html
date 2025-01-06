@@ -79,6 +79,11 @@
             font-style: italic;
             color: #666;
         }
+
+        .cell.disabled {
+            pointer-events: none;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -117,6 +122,8 @@
                 resetBoard();
                 document.getElementById('playerInfo').textContent = 'Connecting to server...';
                 document.getElementById('status').textContent = 'Waiting for opponent...';
+
+                setupBoard();
             };
 
             ws.onmessage = (event) => {
@@ -125,32 +132,25 @@
             };
 
             ws.onclose = (event) => {
-                // Handle different close scenarios
-                if (event.code === 1000) {
-                    // Normal closure
-                    document.getElementById('status').textContent = 'Connection closed';
-                } else {
-                    // Unexpected closure
-                    document.getElementById('status').textContent = 'Connection lost. Please refresh.';
+                // Only show disconnection message if not intentionally closed
+                if (!event.wasClean) {
+                    document.getElementById('status').textContent = 'Connection lost. Reconnecting...';
+                    // Optional: Attempt to reconnect after a short delay
+                    setTimeout(init, 2000);
                 }
                 gameActive = false;
                 resetBoard();
-            };
+    };
 
-            setupBoard();
+    setupBoard();
         }
 
         function setupBoard() {
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
-                cell.addEventListener('click', () => {
-                    if (gameActive && currentTurn === playerSymbol && cell.textContent === '') {
-                        ws.send(JSON.stringify({
-                            type: 'move',
-                            position: parseInt(cell.dataset.index)
-                        }));
-                    }
-                });
+                // Remove any existing listeners first
+                cell.removeEventListener('click', cellClickHandler);
+                cell.addEventListener('click', cellClickHandler);
             }
 
             document.getElementById('rematchBtn').addEventListener('click', () => {
@@ -168,12 +168,20 @@
                     playerSymbol = data.symbol;
                     document.getElementById('playerInfo').textContent = data.message;
                     resetBoard();
+                    setupBoard();
                     break;
 
                 case 'start':
                     gameActive = true;
                     currentTurn = data.turn;
                     updateStatus();
+                    
+                    // Force board to be interactive
+                    const startCells = document.getElementsByClassName('cell');
+                    for (let cell of startCells) {
+                        cell.textContent = ''; // Ensure cells are clear
+                    }
+                    
                     if (data.isFirstGame) {
                         document.getElementById('playerInfo').textContent = `You are player ${playerSymbol}`;
                     }
@@ -196,8 +204,10 @@
                     } else {
                         document.getElementById('status').textContent = `Game Over - Player ${data.winner} Wins!`;
                     }
+                    
                     document.getElementById('rematchBtn').style.display = 'block';
-                    hasVotedRematch = false; // Reset vote state
+                    document.getElementById('rematchBtn').disabled = false;
+                    hasVotedRematch = false;
                     document.getElementById('rematchStatus').textContent = 'Waiting for players to vote for rematch...';
                     break;
 
@@ -206,24 +216,26 @@
                     break;
 
                 case 'restart':
-                    if (hasVotedRematch) {
                     gameActive = true;
                     currentTurn = data.turn;
-                    resetBoard();
+                    
+                    // Reset board cells
+                    const restartCells = document.getElementsByClassName('cell');
+                    for (let cell of restartCells) {
+                        cell.textContent = '';
+                    }
+                    
                     updateStatus();
                     document.getElementById('rematchBtn').style.display = 'none';
                     document.getElementById('rematchStatus').textContent = '';
-                    }
+                    
+                    // Ensure game is interactive
+                    setupBoard();
                     break;
 
                 case 'error':
                     document.getElementById('status').textContent = data.message;
-                    
-                    // If server explicitly requests to force close
-                    if (data.forceClose) {
-                        ws.close(); // Explicitly close the WebSocket
-                        document.getElementById('status').textContent = 'Cannot join game. Room is full.';
-                    }
+                    resetBoard();
                     break;
 
                 case 'playerDisconnected':
@@ -234,6 +246,26 @@
                         // Clear player info and wait for new connection
                         document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
                     }
+                    break;
+                case 'rematchTimerStart':
+                    startRematchTimer(data.timeout);
+                    break;
+
+                case 'waitingForNewPlayer':
+                    document.getElementById('status').textContent = data.message;
+                    resetBoard();
+                    gameActive = false;
+                    document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
+                    break;
+                
+                case 'stopRematchTimer':
+                    clearRematchTimer();
+                    document.getElementById('rematchStatus').textContent = '';
+                    break;
+
+                case 'timeoutDisconnect':
+                    document.getElementById('status').textContent = data.message;
+                    resetBoard();
                     break;
                 
                 case 'waitingForReady':
@@ -255,27 +287,11 @@
                     }
                     break;
                 
-                case 'rematchTimerStart':
-                    startRematchTimer(data.timeout);
-                    break;
-
-                case 'waitingForNewPlayer':
-                    document.getElementById('status').textContent = data.message;
-                    resetBoard();
-                    gameActive = false;
-                    document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
-                    break;
-                
                 case 'stopRematchTimer':
                     clearRematchTimer();
                     document.getElementById('rematchStatus').textContent = '';
                     break;
-
-                case 'timeoutDisconnect':
-                    document.getElementById('status').textContent = data.message;
-                    resetBoard();
-                    break;
-                    }
+            }
         }
 
         function startRematchTimer(timeout) {
@@ -295,6 +311,36 @@
                     }
                 }
             }, 1000);
+        }
+
+        function cellClickHandler(event) {
+            console.log('Cell clicked debug:');
+            console.log('Game Active:', gameActive);
+            console.log('Current Turn:', currentTurn);
+            console.log('Player Symbol:', playerSymbol);
+
+            // More explicit and comprehensive checks
+            if (!gameActive) {
+                console.log('Game is not active - detailed check');
+                console.trace(); // This will print the call stack
+                return;
+            }
+            
+            if (currentTurn !== playerSymbol) {
+                console.log('Not your turn');
+                return;
+            }
+            
+            const cell = event.target;
+            if (cell.textContent !== '') {
+                console.log('Cell already filled');
+                return;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'move',
+                position: parseInt(cell.dataset.index)
+            }));
         }
 
         function updateRematchStatus(votes) {
@@ -329,16 +375,7 @@
         function setupBoard() {
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
-                cell.addEventListener('click', () => {
-                    if (!gameActive) return; // Prevent clicks when game is not active
-                    if (currentTurn !== playerSymbol) return; // Prevent clicks when not player's turn
-                    if (cell.textContent !== '') return; // Prevent clicks on filled cells
-                    
-                    ws.send(JSON.stringify({
-                        type: 'move',
-                        position: parseInt(cell.dataset.index)
-                    }));
-                });
+                cell.addEventListener('click', cellClickHandler);
             }
 
             document.getElementById('rematchBtn').addEventListener('click', () => {
@@ -355,14 +392,19 @@
             for (let cell of cells) {
                 cell.textContent = '';
             }
-            gameActive = false;
+            
+            // Be explicit about game state
+            gameActive = false; // Default to false, but will be set to true during start/restart
             currentTurn = 'X';
             hasVotedRematch = false;
+            
             document.getElementById('rematchBtn').style.display = 'none';
             document.getElementById('rematchBtn').disabled = false;
             document.getElementById('rematchStatus').textContent = '';
             document.getElementById('status').textContent = 'Waiting for opponent...';
+            
             clearRematchTimer();
+            setupBoard();
         }
 
         init();
