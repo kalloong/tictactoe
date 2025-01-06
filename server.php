@@ -31,29 +31,43 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
         $this->clients->attach($conn);
         
-        // Check available slots
-        $assignedSymbol = null;
-        if ($this->playerSlots['X'] === null) {
-            $this->playerSlots['X'] = $conn->resourceId;
-            $assignedSymbol = 'X';
-        } elseif ($this->playerSlots['O'] === null) {
-            $this->playerSlots['O'] = $conn->resourceId;
-            $assignedSymbol = 'O';
+        // If there's only one player left and they didn't have their symbol reassigned
+        if (count($this->players) === 1) {
+            $existingPlayer = reset($this->players);
+            // Keep the existing player's symbol
+            $takenSymbol = $existingPlayer['symbol'];
+            $newSymbol = ($takenSymbol === 'X') ? 'O' : 'X';
+            
+            $this->playerSlots[$newSymbol] = $conn->resourceId;
+            $assignedSymbol = $newSymbol;
+        } else {
+            // Normal first connection logic
+            $assignedSymbol = null;
+            if ($this->playerSlots['X'] === null) {
+                $this->playerSlots['X'] = $conn->resourceId;
+                $assignedSymbol = 'X';
+            } elseif ($this->playerSlots['O'] === null) {
+                $this->playerSlots['O'] = $conn->resourceId;
+                $assignedSymbol = 'O';
+            }
         }
-
+    
         if ($assignedSymbol !== null) {
             $this->players[$conn->resourceId] = [
                 'conn' => $conn,
                 'symbol' => $assignedSymbol
             ];
             
+            // Send connect message to new player
             $conn->send(json_encode([
                 'type' => 'connect',
                 'symbol' => $assignedSymbol,
                 'message' => "You are player $assignedSymbol"
             ]));
-
+    
+            // If game is full, start new game
             if (count($this->players) === 2) {
+                $this->resetGame();
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
                         'type' => 'start',
@@ -144,11 +158,15 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
             $this->playerSlots[$symbol] = null;
             unset($this->players[$conn->resourceId]);
             
-            // Notify remaining player about disconnection
+            // Reset the game state
+            $this->resetGame();
+            
+            // Notify remaining player about disconnection and reset
             foreach ($this->players as $player) {
                 $player['conn']->send(json_encode([
                     'type' => 'playerDisconnected',
-                    'message' => "Player $symbol has disconnected"
+                    'message' => "Player $symbol has disconnected",
+                    'reset' => true
                 ]));
             }
         }

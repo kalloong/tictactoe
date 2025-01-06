@@ -154,12 +154,14 @@
                 case 'connect':
                     playerSymbol = data.symbol;
                     document.getElementById('playerInfo').textContent = data.message;
+                    resetBoard();
                     break;
 
                 case 'start':
                     gameActive = true;
                     currentTurn = data.turn;
                     updateStatus();
+                    document.getElementById('playerInfo').textContent = `You are player ${playerSymbol}`; // Add this line
                     break;
 
                 case 'move':
@@ -197,6 +199,11 @@
                 case 'playerDisconnected':
                     document.getElementById('status').textContent = data.message;
                     gameActive = false;
+                    if (data.reset) {
+                        resetBoard();
+                        // Clear player info and wait for new connection
+                        document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
+                    }
                     break;
             }
         }
@@ -223,18 +230,42 @@
             }
         }
 
+        function setupBoard() {
+            const cells = document.getElementsByClassName('cell');
+            for (let cell of cells) {
+                cell.addEventListener('click', () => {
+                    if (!gameActive) return; // Prevent clicks when game is not active
+                    if (currentTurn !== playerSymbol) return; // Prevent clicks when not player's turn
+                    if (cell.textContent !== '') return; // Prevent clicks on filled cells
+                    
+                    ws.send(JSON.stringify({
+                        type: 'move',
+                        position: parseInt(cell.dataset.index)
+                    }));
+                });
+            }
+
+            document.getElementById('rematchBtn').addEventListener('click', () => {
+                if (!hasVotedRematch) {
+                    ws.send(JSON.stringify({ type: 'rematchVote' }));
+                    hasVotedRematch = true;
+                    document.getElementById('rematchBtn').disabled = true;
+                }
+            });
+        }
+
         function resetBoard() {
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
                 cell.textContent = '';
             }
-            gameActive = true;
+            gameActive = false; // Set to false until a new game starts
             currentTurn = 'X';
             hasVotedRematch = false;
             document.getElementById('rematchBtn').style.display = 'none';
             document.getElementById('rematchBtn').disabled = false;
             document.getElementById('rematchStatus').textContent = '';
-            updateStatus();
+            document.getElementById('status').textContent = 'Waiting for opponent...';
         }
 
         init();
