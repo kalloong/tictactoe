@@ -165,7 +165,8 @@
                     break;
 
                 case 'move':
-                    document.querySelector(`[data-index="${data.position}"]`).textContent = data.symbol;
+                    const cell = document.querySelector(`[data-index="${data.position}"]`);  // Fix cell selector
+                    cell.textContent = data.symbol;
                     break;
 
                 case 'turn':
@@ -190,6 +191,9 @@
 
                 case 'restart':
                     resetBoard();
+                    gameActive = true;  // Set game as active
+                    currentTurn = data.turn;  // Set the current turn
+                    updateStatus();  // Update the turn status
                     break;
 
                 case 'error':

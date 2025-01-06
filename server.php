@@ -144,7 +144,8 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 $this->resetGame();
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
-                        'type' => 'restart'
+                        'type' => 'restart',
+                        'turn' => 'X'  // Add this to indicate first turn
                     ]));
                 }
             }
