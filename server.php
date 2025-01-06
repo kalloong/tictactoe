@@ -36,13 +36,11 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     }
 
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
-        // Explicitly check if both player slots are full
+        // If both player slots are already filled, immediately close the connection
         if ($this->playerSlots['X'] !== null && $this->playerSlots['O'] !== null) {
-            // Send a clear error message and immediately close the connection
             $conn->send(json_encode([
                 'type' => 'error',
-                'message' => 'Game room is full. Please try again later.',
-                'forceClose' => true // Add a flag to force immediate closure
+                'message' => 'Game room is full'
             ]));
             $conn->close();
             return;
@@ -103,11 +101,9 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 }
             }
         } else {
-            // This should never happen, but added as an extra safety measure
             $conn->send(json_encode([
                 'type' => 'error',
-                'message' => 'Unable to join game. Please try again.',
-                'forceClose' => true
+                'message' => 'Game room is full'
             ]));
             $conn->close();
         }
