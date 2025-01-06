@@ -113,6 +113,10 @@
             
             ws.onopen = () => {
                 console.log('Connected to server');
+                // Reset UI to initial state
+                resetBoard();
+                document.getElementById('playerInfo').textContent = 'Connecting to server...';
+                document.getElementById('status').textContent = 'Waiting for opponent...';
             };
 
             ws.onmessage = (event) => {
@@ -120,9 +124,17 @@
                 handleMessage(data);
             };
 
-            ws.onclose = () => {
-                document.getElementById('status').textContent = 'Connection closed';
+            ws.onclose = (event) => {
+                // Handle different close scenarios
+                if (event.code === 1000) {
+                    // Normal closure
+                    document.getElementById('status').textContent = 'Connection closed';
+                } else {
+                    // Unexpected closure
+                    document.getElementById('status').textContent = 'Connection lost. Please refresh.';
+                }
                 gameActive = false;
+                resetBoard();
             };
 
             setupBoard();
@@ -162,7 +174,9 @@
                     gameActive = true;
                     currentTurn = data.turn;
                     updateStatus();
-                    document.getElementById('playerInfo').textContent = `You are player ${playerSymbol}`; // Add this line
+                    if (data.isFirstGame) {
+                        document.getElementById('playerInfo').textContent = `You are player ${playerSymbol}`;
+                    }
                     break;
 
                 case 'move':
@@ -192,14 +206,24 @@
                     break;
 
                 case 'restart':
+                    if (hasVotedRematch) {
+                    gameActive = true;
+                    currentTurn = data.turn;
                     resetBoard();
-                    gameActive = true;  // Set game as active
-                    currentTurn = data.turn;  // Set the current turn
-                    updateStatus();  // Update the turn status
+                    updateStatus();
+                    document.getElementById('rematchBtn').style.display = 'none';
+                    document.getElementById('rematchStatus').textContent = '';
+                    }
                     break;
 
                 case 'error':
                     document.getElementById('status').textContent = data.message;
+                    
+                    // If server explicitly requests to force close
+                    if (data.forceClose) {
+                        ws.close(); // Explicitly close the WebSocket
+                        document.getElementById('status').textContent = 'Cannot join game. Room is full.';
+                    }
                     break;
 
                 case 'playerDisconnected':
@@ -211,6 +235,26 @@
                         document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
                     }
                     break;
+                
+                case 'waitingForReady':
+                    gameActive = false;
+                    document.getElementById('status').textContent = 'Waiting for both players to ready up';
+                    document.getElementById('rematchBtn').style.display = 'block';
+                    document.getElementById('rematchBtn').disabled = false;
+                    hasVotedRematch = false;
+                    break;
+                
+                case 'readyForRematch':
+                    if (hasVotedRematch) {
+                        gameActive = true;
+                        currentTurn = 'X'; // Reset to initial turn
+                        resetBoard();
+                        updateStatus();
+                        document.getElementById('rematchBtn').style.display = 'none';
+                        document.getElementById('rematchStatus').textContent = '';
+                    }
+                    break;
+                
                 case 'rematchTimerStart':
                     startRematchTimer(data.timeout);
                     break;
@@ -219,6 +263,7 @@
                     document.getElementById('status').textContent = data.message;
                     resetBoard();
                     gameActive = false;
+                    document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
                     break;
                 
                 case 'stopRematchTimer':
@@ -228,9 +273,9 @@
 
                 case 'timeoutDisconnect':
                     document.getElementById('status').textContent = data.message;
-                    ws.close();
+                    resetBoard();
                     break;
-            }
+                    }
         }
 
         function startRematchTimer(timeout) {
@@ -317,7 +362,7 @@
             document.getElementById('rematchBtn').disabled = false;
             document.getElementById('rematchStatus').textContent = '';
             document.getElementById('status').textContent = 'Waiting for opponent...';
-            clearRematchTimer(); // Add this line
+            clearRematchTimer();
         }
 
         init();

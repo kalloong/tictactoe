@@ -36,26 +36,39 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     }
 
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
+        // Explicitly check if both player slots are full
+        if ($this->playerSlots['X'] !== null && $this->playerSlots['O'] !== null) {
+            // Send a clear error message and immediately close the connection
+            $conn->send(json_encode([
+                'type' => 'error',
+                'message' => 'Game room is full. Please try again later.',
+                'forceClose' => true // Add a flag to force immediate closure
+            ]));
+            $conn->close();
+            return;
+        }
+    
         $this->clients->attach($conn);
         
+        // Determine available symbol and handle connection
+        $assignedSymbol = null;
+        
+        // Check if there's a player waiting for a rematch
         if ($this->waitingForRematch !== null) {
-            // Assign new player opposite to waiting player
             $waitingPlayer = $this->players[$this->waitingForRematch];
-            $newSymbol = ($waitingPlayer['symbol'] === 'X') ? 'O' : 'X';
-            $this->playerSlots[$newSymbol] = $conn->resourceId;
-            $assignedSymbol = $newSymbol;
+            $assignedSymbol = ($waitingPlayer['symbol'] === 'X') ? 'O' : 'X';
+            $this->playerSlots[$assignedSymbol] = $conn->resourceId;
+            
+            // Reset waiting state
+            $this->waitingForRematch = null;
         } else {
-            // Random assignment for new game
-            $assignedSymbol = null;
-            if (empty($this->players)) {
-                $randomSymbol = (rand(0, 1) === 0) ? 'X' : 'O';
-                $this->playerSlots[$randomSymbol] = $conn->resourceId;
-                $assignedSymbol = $randomSymbol;
-            } else {
-                $existingSymbol = reset($this->players)['symbol'];
-                $availableSymbol = ($existingSymbol === 'X') ? 'O' : 'X';
-                $this->playerSlots[$availableSymbol] = $conn->resourceId;
-                $assignedSymbol = $availableSymbol;
+            // Assign symbol based on current game state
+            if ($this->playerSlots['X'] === null) {
+                $assignedSymbol = 'X';
+                $this->playerSlots['X'] = $conn->resourceId;
+            } elseif ($this->playerSlots['O'] === null) {
+                $assignedSymbol = 'O';
+                $this->playerSlots['O'] = $conn->resourceId;
             }
         }
     
@@ -71,20 +84,30 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 'message' => "You are player $assignedSymbol"
             ]));
     
+            // If two players are now connected, start the game
             if (count($this->players) === 2) {
+                // Reset rematch-related states
+                $this->rematchVotes = ['X' => false, 'O' => false];
+                $this->rematchTimer = null;
+                $this->lastRematchVoter = null;
                 $this->waitingForRematch = null;
+    
+                // For the first game, start automatically
                 $this->resetGame();
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
                         'type' => 'start',
-                        'turn' => $this->currentTurn
+                        'turn' => $this->currentTurn,
+                        'isFirstGame' => true // Add a flag for first game
                     ]));
                 }
             }
         } else {
+            // This should never happen, but added as an extra safety measure
             $conn->send(json_encode([
                 'type' => 'error',
-                'message' => 'Game room is full'
+                'message' => 'Unable to join game. Please try again.',
+                'forceClose' => true
             ]));
             $conn->close();
         }
@@ -175,11 +198,15 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 $this->rematchTimer = null;
                 $this->lastRematchVoter = null; // Reset last voter on successful rematch
                 $this->resetGame();
+                
+                // Send stop timer message to both players
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
                         'type' => 'stopRematchTimer'
                     ]));
                 }
+                
+                // Send restart message only after both players have voted
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
                         'type' => 'restart',
@@ -238,9 +265,21 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     }
 
     private function handleRematchTimeout($votedSymbol) {
+        // Store the player who voted
+        $votingPlayerResourceId = null;
+        
         // Disconnect non-voting player
         foreach ($this->players as $resourceId => $player) {
-            if ($player['symbol'] !== $votedSymbol) {
+            if ($player['symbol'] === $votedSymbol) {
+                $votingPlayerResourceId = $resourceId;
+                $this->waitingForRematch = $resourceId;
+                
+                // Update remaining player status
+                $player['conn']->send(json_encode([
+                    'type' => 'waitingForNewPlayer',
+                    'message' => 'Opponent disconnected. Waiting for new opponent...'
+                ]));
+            } else {
                 // Send message before closing
                 $player['conn']->send(json_encode([
                     'type' => 'timeoutDisconnect',
@@ -249,17 +288,13 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 $player['conn']->close();
                 unset($this->players[$resourceId]);
                 $this->playerSlots[$player['symbol']] = null;
-            } else {
-                $this->waitingForRematch = $resourceId;
-                // Update remaining player status
-                $player['conn']->send(json_encode([
-                    'type' => 'waitingForNewPlayer',
-                    'message' => 'Opponent disconnected. Waiting for new opponent...'
-                ]));
             }
         }
+        
+        // Reset rematch-related states
         $this->rematchTimer = null;
         $this->rematchVotes = ['X' => false, 'O' => false];
+        $this->lastRematchVoter = null;
     }
 }
 
