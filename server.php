@@ -14,12 +14,19 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     private $currentTurn;
     private $rematchVotes;
     private $playerSlots;
+    private $rematchTimer;
+    private $rematchTimeout = 30; // 30 seconds
+    private $waitingForRematch = null; // Store player waiting for rematch
+    private $lastRematchVoter = null;
 
     public function __construct() {
         $this->clients = new \SplObjectStorage;
         $this->players = [];
         $this->playerSlots = ['X' => null, 'O' => null];
         $this->resetGame();
+        $this->rematchTimer = null;
+        $this->waitingForRematch = null; // Reset waiting state
+        $this->lastRematchVoter = null;  // Reset last voter
     }
 
     private function resetGame() {
@@ -31,24 +38,24 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
         $this->clients->attach($conn);
         
-        // If there's only one player left and they didn't have their symbol reassigned
-        if (count($this->players) === 1) {
-            $existingPlayer = reset($this->players);
-            // Keep the existing player's symbol
-            $takenSymbol = $existingPlayer['symbol'];
-            $newSymbol = ($takenSymbol === 'X') ? 'O' : 'X';
-            
+        if ($this->waitingForRematch !== null) {
+            // Assign new player opposite to waiting player
+            $waitingPlayer = $this->players[$this->waitingForRematch];
+            $newSymbol = ($waitingPlayer['symbol'] === 'X') ? 'O' : 'X';
             $this->playerSlots[$newSymbol] = $conn->resourceId;
             $assignedSymbol = $newSymbol;
         } else {
-            // Normal first connection logic
+            // Random assignment for new game
             $assignedSymbol = null;
-            if ($this->playerSlots['X'] === null) {
-                $this->playerSlots['X'] = $conn->resourceId;
-                $assignedSymbol = 'X';
-            } elseif ($this->playerSlots['O'] === null) {
-                $this->playerSlots['O'] = $conn->resourceId;
-                $assignedSymbol = 'O';
+            if (empty($this->players)) {
+                $randomSymbol = (rand(0, 1) === 0) ? 'X' : 'O';
+                $this->playerSlots[$randomSymbol] = $conn->resourceId;
+                $assignedSymbol = $randomSymbol;
+            } else {
+                $existingSymbol = reset($this->players)['symbol'];
+                $availableSymbol = ($existingSymbol === 'X') ? 'O' : 'X';
+                $this->playerSlots[$availableSymbol] = $conn->resourceId;
+                $assignedSymbol = $availableSymbol;
             }
         }
     
@@ -58,20 +65,19 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 'symbol' => $assignedSymbol
             ];
             
-            // Send connect message to new player
             $conn->send(json_encode([
                 'type' => 'connect',
                 'symbol' => $assignedSymbol,
                 'message' => "You are player $assignedSymbol"
             ]));
     
-            // If game is full, start new game
             if (count($this->players) === 2) {
+                $this->waitingForRematch = null;
                 $this->resetGame();
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
                         'type' => 'start',
-                        'turn' => 'X'
+                        'turn' => $this->currentTurn
                     ]));
                 }
             }
@@ -128,24 +134,56 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                 }
             }
         } elseif ($data->type === 'rematchVote') {
+            // Reset last rematch voter if this is a new game session
+            if ($this->lastRematchVoter !== null && !isset($this->players[$this->lastRematchVoter])) {
+                $this->lastRematchVoter = null;
+            }
+            
             $playerSymbol = $this->players[$from->resourceId]['symbol'];
             $this->rematchVotes[$playerSymbol] = true;
+            $this->lastRematchVoter = $from->resourceId;
             
-            // Notify all players about the rematch vote
+            // Start timer if first vote
+            if ($this->rematchTimer === null) {
+                $this->rematchTimer = time();
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode([
+                        'type' => 'rematchTimerStart',
+                        'timeout' => $this->rematchTimeout
+                    ]));
+                }
+            }
+            
+            // Check time elapsed
+            $timeElapsed = time() - $this->rematchTimer;
+            if ($timeElapsed > $this->rematchTimeout) {
+                // Time expired - handle timeout
+                $this->handleRematchTimeout($playerSymbol);
+                return;
+            }
+        
             foreach ($this->players as $player) {
                 $player['conn']->send(json_encode([
                     'type' => 'rematchVoteUpdate',
-                    'votes' => $this->rematchVotes
+                    'votes' => $this->rematchVotes,
+                    'timeLeft' => $this->rematchTimeout - $timeElapsed
                 ]));
             }
-
-            // If both players voted for rematch
+        
+            // If both voted
             if ($this->rematchVotes['X'] && $this->rematchVotes['O']) {
+                $this->rematchTimer = null;
+                $this->lastRematchVoter = null; // Reset last voter on successful rematch
                 $this->resetGame();
                 foreach ($this->players as $player) {
                     $player['conn']->send(json_encode([
+                        'type' => 'stopRematchTimer'
+                    ]));
+                }
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode([
                         'type' => 'restart',
-                        'turn' => 'X'  // Add this to indicate first turn
+                        'turn' => $this->currentTurn
                     ]));
                 }
             }
@@ -197,6 +235,31 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
 
     private function checkDraw() {
         return !in_array('', $this->gameState);
+    }
+
+    private function handleRematchTimeout($votedSymbol) {
+        // Disconnect non-voting player
+        foreach ($this->players as $resourceId => $player) {
+            if ($player['symbol'] !== $votedSymbol) {
+                // Send message before closing
+                $player['conn']->send(json_encode([
+                    'type' => 'timeoutDisconnect',
+                    'message' => 'You have been disconnected due to rematch timeout'
+                ]));
+                $player['conn']->close();
+                unset($this->players[$resourceId]);
+                $this->playerSlots[$player['symbol']] = null;
+            } else {
+                $this->waitingForRematch = $resourceId;
+                // Update remaining player status
+                $player['conn']->send(json_encode([
+                    'type' => 'waitingForNewPlayer',
+                    'message' => 'Opponent disconnected. Waiting for new opponent...'
+                ]));
+            }
+        }
+        $this->rematchTimer = null;
+        $this->rematchVotes = ['X' => false, 'O' => false];
     }
 }
 

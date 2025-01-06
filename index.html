@@ -106,6 +106,7 @@
         let currentTurn;
         let gameActive = false;
         let hasVotedRematch = false;
+        let rematchTimerInterval;
 
         function init() {
             ws = new WebSocket('ws://127.0.0.1:8080');
@@ -182,6 +183,7 @@
                         document.getElementById('status').textContent = `Game Over - Player ${data.winner} Wins!`;
                     }
                     document.getElementById('rematchBtn').style.display = 'block';
+                    hasVotedRematch = false; // Reset vote state
                     document.getElementById('rematchStatus').textContent = 'Waiting for players to vote for rematch...';
                     break;
 
@@ -209,7 +211,45 @@
                         document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
                     }
                     break;
+                case 'rematchTimerStart':
+                    startRematchTimer(data.timeout);
+                    break;
+
+                case 'waitingForNewPlayer':
+                    document.getElementById('status').textContent = data.message;
+                    resetBoard();
+                    gameActive = false;
+                    break;
+                
+                case 'stopRematchTimer':
+                    clearRematchTimer();
+                    document.getElementById('rematchStatus').textContent = '';
+                    break;
+
+                case 'timeoutDisconnect':
+                    document.getElementById('status').textContent = data.message;
+                    ws.close();
+                    break;
             }
+        }
+
+        function startRematchTimer(timeout) {
+            clearRematchTimer(); // Clear any existing timer
+            let timeLeft = timeout;
+            rematchTimerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('rematchStatus').textContent = 
+                    `Time remaining to vote: ${timeLeft} seconds`;
+                
+                if (timeLeft <= 0) {
+                    clearRematchTimer();
+                    if (!hasVotedRematch) {
+                        document.getElementById('rematchStatus').textContent = 
+                            'Rematch time expired';
+                        document.getElementById('rematchBtn').style.display = 'none';
+                    }
+                }
+            }, 1000);
         }
 
         function updateRematchStatus(votes) {
@@ -222,6 +262,13 @@
                 rematchStatus.textContent = 'Waiting for players to vote for rematch...';
             } else if (votedPlayers.length === 1) {
                 rematchStatus.textContent = `Player ${votedPlayers[0]} voted for rematch. Waiting for other player...`;
+            }
+        }
+
+        function clearRematchTimer() {
+            if (rematchTimerInterval) {
+                clearInterval(rematchTimerInterval);
+                rematchTimerInterval = null;
             }
         }
 
@@ -263,13 +310,14 @@
             for (let cell of cells) {
                 cell.textContent = '';
             }
-            gameActive = false; // Set to false until a new game starts
+            gameActive = false;
             currentTurn = 'X';
             hasVotedRematch = false;
             document.getElementById('rematchBtn').style.display = 'none';
             document.getElementById('rematchBtn').disabled = false;
             document.getElementById('rematchStatus').textContent = '';
             document.getElementById('status').textContent = 'Waiting for opponent...';
+            clearRematchTimer(); // Add this line
         }
 
         init();
