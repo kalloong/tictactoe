@@ -12,32 +12,45 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     private $players;
     private $gameState;
     private $currentTurn;
+    private $rematchVotes;
+    private $playerSlots;
 
     public function __construct() {
         $this->clients = new \SplObjectStorage;
         $this->players = [];
+        $this->playerSlots = ['X' => null, 'O' => null];
         $this->resetGame();
     }
 
     private function resetGame() {
         $this->gameState = array_fill(0, 9, '');
         $this->currentTurn = 'X';
+        $this->rematchVotes = ['X' => false, 'O' => false];
     }
 
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
         $this->clients->attach($conn);
         
-        if (count($this->players) < 2) {
-            $symbol = (count($this->players) === 0) ? 'X' : 'O';
+        // Check available slots
+        $assignedSymbol = null;
+        if ($this->playerSlots['X'] === null) {
+            $this->playerSlots['X'] = $conn->resourceId;
+            $assignedSymbol = 'X';
+        } elseif ($this->playerSlots['O'] === null) {
+            $this->playerSlots['O'] = $conn->resourceId;
+            $assignedSymbol = 'O';
+        }
+
+        if ($assignedSymbol !== null) {
             $this->players[$conn->resourceId] = [
                 'conn' => $conn,
-                'symbol' => $symbol
+                'symbol' => $assignedSymbol
             ];
             
             $conn->send(json_encode([
                 'type' => 'connect',
-                'symbol' => $symbol,
-                'message' => "You are player $symbol"
+                'symbol' => $assignedSymbol,
+                'message' => "You are player $assignedSymbol"
             ]));
 
             if (count($this->players) === 2) {
@@ -100,20 +113,44 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                     }
                 }
             }
-        } elseif ($data->type === 'rematch') {
-            $this->resetGame();
+        } elseif ($data->type === 'rematchVote') {
+            $playerSymbol = $this->players[$from->resourceId]['symbol'];
+            $this->rematchVotes[$playerSymbol] = true;
+            
+            // Notify all players about the rematch vote
             foreach ($this->players as $player) {
                 $player['conn']->send(json_encode([
-                    'type' => 'restart'
+                    'type' => 'rematchVoteUpdate',
+                    'votes' => $this->rematchVotes
                 ]));
+            }
+
+            // If both players voted for rematch
+            if ($this->rematchVotes['X'] && $this->rematchVotes['O']) {
+                $this->resetGame();
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode([
+                        'type' => 'restart'
+                    ]));
+                }
             }
         }
     }
 
     public function onClose(\Ratchet\ConnectionInterface $conn) {
+        // Find which symbol the disconnected player had
         if (isset($this->players[$conn->resourceId])) {
+            $symbol = $this->players[$conn->resourceId]['symbol'];
+            $this->playerSlots[$symbol] = null;
             unset($this->players[$conn->resourceId]);
-            $this->resetGame();
+            
+            // Notify remaining player about disconnection
+            foreach ($this->players as $player) {
+                $player['conn']->send(json_encode([
+                    'type' => 'playerDisconnected',
+                    'message' => "Player $symbol has disconnected"
+                ]));
+            }
         }
         $this->clients->detach($conn);
     }

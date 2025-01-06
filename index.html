@@ -64,9 +64,20 @@
             background-color: #45a049;
         }
 
+        .rematch-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
         .player-info {
             margin: 10px 0;
             font-weight: bold;
+        }
+
+        .rematch-status {
+            margin: 10px 0;
+            font-style: italic;
+            color: #666;
         }
     </style>
 </head>
@@ -74,6 +85,7 @@
     <div class="game-container">
         <div class="player-info" id="playerInfo">Connecting to server...</div>
         <div class="status" id="status"></div>
+        <div class="rematch-status" id="rematchStatus"></div>
         <div class="board" id="board">
             <div class="cell" data-index="0"></div>
             <div class="cell" data-index="1"></div>
@@ -85,7 +97,7 @@
             <div class="cell" data-index="7"></div>
             <div class="cell" data-index="8"></div>
         </div>
-        <button class="rematch-btn" id="rematchBtn">Rematch</button>
+        <button class="rematch-btn" id="rematchBtn">Vote for Rematch</button>
     </div>
 
     <script>
@@ -93,6 +105,7 @@
         let playerSymbol;
         let currentTurn;
         let gameActive = false;
+        let hasVotedRematch = false;
 
         function init() {
             ws = new WebSocket('ws://127.0.0.1:8080');
@@ -128,7 +141,11 @@
             }
 
             document.getElementById('rematchBtn').addEventListener('click', () => {
-                ws.send(JSON.stringify({ type: 'rematch' }));
+                if (!hasVotedRematch) {
+                    ws.send(JSON.stringify({ type: 'rematchVote' }));
+                    hasVotedRematch = true;
+                    document.getElementById('rematchBtn').disabled = true;
+                }
             });
         }
 
@@ -162,6 +179,11 @@
                         document.getElementById('status').textContent = `Game Over - Player ${data.winner} Wins!`;
                     }
                     document.getElementById('rematchBtn').style.display = 'block';
+                    document.getElementById('rematchStatus').textContent = 'Waiting for players to vote for rematch...';
+                    break;
+
+                case 'rematchVoteUpdate':
+                    updateRematchStatus(data.votes);
                     break;
 
                 case 'restart':
@@ -171,6 +193,24 @@
                 case 'error':
                     document.getElementById('status').textContent = data.message;
                     break;
+
+                case 'playerDisconnected':
+                    document.getElementById('status').textContent = data.message;
+                    gameActive = false;
+                    break;
+            }
+        }
+
+        function updateRematchStatus(votes) {
+            const rematchStatus = document.getElementById('rematchStatus');
+            const votedPlayers = Object.entries(votes)
+                .filter(([_, voted]) => voted)
+                .map(([symbol, _]) => symbol);
+            
+            if (votedPlayers.length === 0) {
+                rematchStatus.textContent = 'Waiting for players to vote for rematch...';
+            } else if (votedPlayers.length === 1) {
+                rematchStatus.textContent = `Player ${votedPlayers[0]} voted for rematch. Waiting for other player...`;
             }
         }
 
@@ -190,7 +230,10 @@
             }
             gameActive = true;
             currentTurn = 'X';
+            hasVotedRematch = false;
             document.getElementById('rematchBtn').style.display = 'none';
+            document.getElementById('rematchBtn').disabled = false;
+            document.getElementById('rematchStatus').textContent = '';
             updateStatus();
         }
 
