@@ -18,6 +18,10 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     private $rematchTimeout = 30; // 30 seconds
     private $waitingForRematch = null; // Store player waiting for rematch
     private $lastRematchVoter = null;
+    private $chatHistory = []; // add protocol chat
+    private $gameHistory = []; // add protocol history game
+    private $turnTimer = null;
+    private $turnTimeout = 5; // 5 seconds for each turn
 
     public function __construct() {
         $this->clients = new \SplObjectStorage;
@@ -33,6 +37,17 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
         $this->gameState = array_fill(0, 9, '');
         $this->currentTurn = 'X';
         $this->rematchVotes = ['X' => false, 'O' => false];
+        $this->chatHistory = [];
+        $this->turnTimer = time();
+        
+        // Send initial turn with timeout to all players
+        foreach ($this->players as $player) {
+            $player['conn']->send(json_encode([
+                'type' => 'turn',
+                'turn' => $this->currentTurn,
+                'timeout' => $this->turnTimeout
+            ]));
+        }
     }
 
     public function onOpen(\Ratchet\ConnectionInterface $conn) {
@@ -107,11 +122,68 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
             ]));
             $conn->close();
         }
+
+        // add protocol chat history
+        if (isset($this->players[$conn->resourceId])) {
+            foreach ($this->chatHistory as $chatMsg) {
+                $conn->send(json_encode($chatMsg));
+            }
+        }
     }
 
     public function onMessage(\Ratchet\ConnectionInterface $from, $msg) {
         $data = json_decode($msg);
         
+        // added protocol chat
+        // Handle chat messages
+        if ($data->type === 'chat') {
+            if (isset($this->players[$from->resourceId])) {
+                $playerSymbol = $this->players[$from->resourceId]['symbol'];
+                $chatMessage = [
+                    'type' => 'chat',
+                    'player' => $playerSymbol,
+                    'message' => $data->message,
+                    'timestamp' => date('H:i:s')
+                ];
+                
+                $this->chatHistory[] = $chatMessage;
+                
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode($chatMessage));
+                }
+            }
+            return;
+        }
+
+        //added protocol timeout turn
+        if ($data->type === 'turnTimeout') {
+            if (isset($this->players[$from->resourceId])) {
+                $timeoutPlayer = $this->players[$from->resourceId]['symbol'];
+                $winner = ($timeoutPlayer === 'X') ? 'O' : 'X';
+                
+                // Add timeout game to history
+                $this->addGameToHistory($winner, 'timeout');
+                
+                // End the game and notify players
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode([
+                        'type' => 'gameOver',
+                        'winner' => $winner,
+                        'reason' => 'timeout',
+                        'timeoutPlayer' => $timeoutPlayer,
+                        'gameHistory' => $this->gameHistory
+                    ]));
+                }
+                
+                // Reset game state
+                $this->gameState = array_fill(0, 9, '');
+                $this->turnTimer = null;
+                $gameActive = false;
+                
+                return;
+            }
+        }
+
         if ($data->type === 'move') {
             if (isset($this->players[$from->resourceId]) && 
                 $this->players[$from->resourceId]['symbol'] === $this->currentTurn) {
@@ -128,25 +200,37 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
                     }
 
                     if ($this->checkWin()) {
+                        $this->turnTimer = null; // Reset timer
+                        // Add game result to history
+                        $this->addGameToHistory($this->currentTurn);
+                        
                         foreach ($this->players as $player) {
                             $player['conn']->send(json_encode([
                                 'type' => 'gameOver',
-                                'winner' => $this->currentTurn
+                                'winner' => $this->currentTurn,
+                                'gameHistory' => $this->gameHistory
                             ]));
                         }
                     } elseif ($this->checkDraw()) {
+                        $this->turnTimer = null; // Reset timer
+                        // Add draw to history
+                        $this->addGameToHistory('draw');
+                        
                         foreach ($this->players as $player) {
                             $player['conn']->send(json_encode([
                                 'type' => 'gameOver',
-                                'winner' => 'draw'
+                                'winner' => 'draw',
+                                'gameHistory' => $this->gameHistory
                             ]));
                         }
                     } else {
                         $this->currentTurn = ($this->currentTurn === 'X') ? 'O' : 'X';
+                        $this->turnTimer = time(); // Reset turn timer for next player
                         foreach ($this->players as $player) {
                             $player['conn']->send(json_encode([
                                 'type' => 'turn',
-                                'turn' => $this->currentTurn
+                                'turn' => $this->currentTurn,
+                                'timeout' => $this->turnTimeout
                             ]));
                         }
                     }
@@ -220,6 +304,9 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
             $this->playerSlots[$symbol] = null;
             unset($this->players[$conn->resourceId]);
             
+            // Clear chat history when a player disconnects
+            $this->chatHistory = [];
+            $this->gameHistory = []; // Clear game history
             // Reset the game state
             $this->resetGame();
             
@@ -238,6 +325,45 @@ class TicTacToeServer implements \Ratchet\MessageComponentInterface {
     public function onError(\Ratchet\ConnectionInterface $conn, \Exception $e) {
         $conn->close();
     }
+
+    // add protocol history game
+    private function addGameToHistory($result, $reason = 'normal') {
+        $this->gameHistory[] = [
+            'result' => $result,
+            'reason' => $reason,
+            'timestamp' => date('H:i:s')
+        ];
+    }
+    
+
+    // add protocol Timer Turn
+    private function checkTurnTimeout() {
+        if ($this->turnTimer !== null) {
+            $timeElapsed = time() - $this->turnTimer;
+            if ($timeElapsed >= $this->turnTimeout) {
+                // Current player loses due to timeout
+                $loser = $this->currentTurn;
+                $winner = ($loser === 'X') ? 'O' : 'X';
+                
+                // Add game to history with timeout winner
+                $this->addGameToHistory($winner);
+                
+                // Notify players about timeout and game result
+                foreach ($this->players as $player) {
+                    $player['conn']->send(json_encode([
+                        'type' => 'gameOver',
+                        'winner' => $winner,
+                        'reason' => 'timeout',
+                        'gameHistory' => $this->gameHistory
+                    ]));
+                }
+                
+                return true;
+            }
+        }
+        return false;
+    }
+    
 
     private function checkWin() {
         $winPatterns = [

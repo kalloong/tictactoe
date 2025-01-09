@@ -1,22 +1,53 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tic Tac Toe</title>
+    <title>Tic Tac Toe Game</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
         }
         
         .game-container {
-            margin-top: 20px;
-            background-color: white;
+            position: relative;
+            background: white;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        /* add start protocol 2 */
+        .start-screen {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .start-screen h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .start-btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .start-btn:hover {
+            background-color: #45a049;
+        }
+
+        .game-board {
+            display: none;
         }
 
         .board {
@@ -25,6 +56,7 @@
             gap: 5px;
             margin: 20px 0;
         }
+        /* end protocol 2 */
 
         .cell {
             width: 100px;
@@ -84,25 +116,165 @@
             pointer-events: none;
             opacity: 0.5;
         }
+
+        /* add protocol 3 */
+        .game-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 15px;
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-container:last-child {
+            display: none;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 5px;
+        }
+
+        .chat-message .player {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .chat-message .time {
+            color: #666;
+            font-size: 0.8em;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .chat-send {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .chat-send:hover {
+            background-color: #45a049;
+        }
+
+        .game-history {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 10px;
+            border-radius: 5px;
+            width: 120px;
+        }
+
+        .game-history h4 {
+            margin: 0 0 10px 0;
+            text-align: center;
+        }
+
+        #historyItems {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            text-align: center;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            width: 25px;
+            height: 25px;
+            border-radius: 4px;
+        }
+
+        .history-win {
+            color: #4CAF50;
+        }
+
+        .history-lose {
+            color: #f44336;
+        }
+
+        .history-draw {
+            color: #ffdd00;
+        }
     </style>
 </head>
 <body>
-    <div class="game-container">
-        <div class="player-info" id="playerInfo">Connecting to server...</div>
-        <div class="status" id="status"></div>
-        <div class="rematch-status" id="rematchStatus"></div>
-        <div class="board" id="board">
-            <div class="cell" data-index="0"></div>
-            <div class="cell" data-index="1"></div>
-            <div class="cell" data-index="2"></div>
-            <div class="cell" data-index="3"></div>
-            <div class="cell" data-index="4"></div>
-            <div class="cell" data-index="5"></div>
-            <div class="cell" data-index="6"></div>
-            <div class="cell" data-index="7"></div>
-            <div class="cell" data-index="8"></div>
+    <div class="start-screen" id="startScreen">
+        <h1>Welcome to Tic Tac Toe</h1>
+        <button class="start-btn" id="startBtn">Start Match</button>
+    </div>
+
+    <div class="game-board" id="gameBoard" style="display: none;">
+        <div class="game-layout">
+            <!-- add protocol 3 -->
+            <!-- Chat container on the left -->
+            <div class="chat-container" id="chatContainer">
+                <h3>Game Chat</h3>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-container">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
+                    <button class="chat-send" id="chatSend">Send</button>
+                </div>
+            </div>
+
+            <div class="game-container">
+                <div class="player-info" id="playerInfo">Connecting to server...</div>
+                <div class="status" id="status"></div>
+                <div class="rematch-status" id="rematchStatus"></div>
+                <div class="board" id="board">
+                    <div class="cell" data-index="0"></div>
+                    <div class="cell" data-index="1"></div>
+                    <div class="cell" data-index="2"></div>
+                    <div class="cell" data-index="3"></div>
+                    <div class="cell" data-index="4"></div>
+                    <div class="cell" data-index="5"></div>
+                    <div class="cell" data-index="6"></div>
+                    <div class="cell" data-index="7"></div>
+                    <div class="cell" data-index="8"></div>
+            </div>
+            <button class="rematch-btn" id="rematchBtn">Vote for Rematch</button>
+            <div class="game-history" id="gameHistory">
+                <h4>Game History</h4>
+                <div id="historyItems"></div>
+            </div>
         </div>
-        <button class="rematch-btn" id="rematchBtn">Vote for Rematch</button>
     </div>
 
     <script>
@@ -112,43 +284,85 @@
         let gameActive = false;
         let hasVotedRematch = false;
         let rematchTimerInterval;
+        let isConnected = false;
+        let turnTimerInterval;
+        let timeLeft;
+        const TURN_TIMEOUT = 5;
+        let isTimeout = false;
+
+        // add protocol start
+        // Remove auto-init, only initialize when start button is clicked
+        document.getElementById('startBtn').addEventListener('click', function() {
+            // Hide start screen and show game board
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameBoard').style.display = 'block';
+            
+            // Initialize WebSocket connection
+            init();
+        });
 
         function init() {
-            ws = new WebSocket('ws://127.0.0.1:8080');
+            if (!isConnected) {
+                ws = new WebSocket('ws://127.0.0.1:8080');
+                
+                ws.onopen = () => {
+                    console.log('Connected to server');
+                    isConnected = true;
+                    resetBoard();
+                    document.getElementById('playerInfo').textContent = 'Connecting to server...';
+                    document.getElementById('status').textContent = 'Waiting for opponent...';
+                    setupBoard();
+                    setupChat(); 
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                };
+
+                ws.onclose = (event) => {
+                    if (!event.wasClean) {
+                        document.getElementById('status').textContent = 'Connection lost. Please refresh the page and try again.';
+                    }
+                    isConnected = false;
+                    gameActive = false;
+                    resetBoard();
+                };
+            }
+        }
+
+        // add protocol chat
+        function setupChat() {
+            // Show chat container
+            document.getElementById('chatContainer').style.display = 'block';
             
-            ws.onopen = () => {
-                console.log('Connected to server');
-                // Reset UI to initial state
-                resetBoard();
-                document.getElementById('playerInfo').textContent = 'Connecting to server...';
-                document.getElementById('status').textContent = 'Waiting for opponent...';
-
-                setupBoard();
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-
-            ws.onclose = (event) => {
-                // Only show disconnection message if not intentionally closed
-                if (!event.wasClean) {
-                    document.getElementById('status').textContent = 'Connection lost. Reconnecting...';
-                    // Optional: Attempt to reconnect after a short delay
-                    setTimeout(init, 2000);
+            // Setup chat input handling
+            const chatInput = document.getElementById('chatInput');
+            const chatSend = document.getElementById('chatSend');
+            
+            function sendMessage() {
+                const message = chatInput.value.trim();
+                if (message) {
+                    ws.send(JSON.stringify({
+                        type: 'chat',
+                        message: message
+                    }));
+                    chatInput.value = '';
                 }
-                gameActive = false;
-                resetBoard();
-    };
+            }
 
-    setupBoard();
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+
+            chatSend.addEventListener('click', sendMessage);
         }
 
         function setupBoard() {
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
-                // Remove any existing listeners first
                 cell.removeEventListener('click', cellClickHandler);
                 cell.addEventListener('click', cellClickHandler);
             }
@@ -163,6 +377,29 @@
         }
 
         function handleMessage(data) {
+            // add protocol 3
+            if (data.type === 'chat') {
+                const chatMessages = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'chat-message';
+                messageDiv.innerHTML = `
+                    <span class="player">${data.player}:</span>
+                    <span class="message">${data.message}</span>
+                    <span class="time">${data.timestamp}</span>
+                `;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return;
+            }
+
+            // protocol hsitoy game
+            if (data.type === 'gameOver') {
+                // Update game history display
+                updateGameHistory(data.gameHistory, playerSymbol);
+                
+            }
+
+
             switch(data.type) {
                 case 'connect':
                     playerSymbol = data.symbol;
@@ -174,32 +411,49 @@
                 case 'start':
                     gameActive = true;
                     currentTurn = data.turn;
-                    updateStatus();
-                    
-                    // Force board to be interactive
+                    updateTurnTimer(TURN_TIMEOUT);
                     const startCells = document.getElementsByClassName('cell');
                     for (let cell of startCells) {
-                        cell.textContent = ''; // Ensure cells are clear
+                        cell.textContent = '';
                     }
-                    
                     if (data.isFirstGame) {
                         document.getElementById('playerInfo').textContent = `You are player ${playerSymbol}`;
                     }
                     break;
 
                 case 'move':
-                    const cell = document.querySelector(`[data-index="${data.position}"]`);  // Fix cell selector
+                    const cell = document.querySelector(`[data-index="${data.position}"]`);
+                    if (cell) {
                     cell.textContent = data.symbol;
+                        // Update timer for the next turn
+                        if (gameActive && data.symbol !== playerSymbol) {
+                            updateTurnTimer(TURN_TIMEOUT);
+                        }
+                    }
                     break;
 
                 case 'turn':
                     currentTurn = data.turn;
-                    updateStatus();
+                    updateTurnTimer(data.timeout || TURN_TIMEOUT);
                     break;
 
                 case 'gameOver':
                     gameActive = false;
-                    if (data.winner === 'draw') {
+                    clearInterval(turnTimerInterval);
+                    isTimeout = false;
+                    
+                    const cells = document.getElementsByClassName('cell');
+                    for (let cell of cells) {
+                        cell.classList.add('disabled');
+                    }
+                    
+                    if (data.reason === 'timeout') {
+                        const isCurrentPlayerTimeout = data.timeoutPlayer === playerSymbol;
+                        const statusMessage = isCurrentPlayerTimeout ? 
+                            "Game Over - You lost due to timeout!" :
+                            "Game Over - You won! Opponent's time ran out!";
+                        document.getElementById('status').textContent = statusMessage;
+                    } else if (data.winner === 'draw') {
                         document.getElementById('status').textContent = "Game Over - It's a Draw!";
                     } else {
                         document.getElementById('status').textContent = `Game Over - Player ${data.winner} Wins!`;
@@ -218,18 +472,13 @@
                 case 'restart':
                     gameActive = true;
                     currentTurn = data.turn;
-                    
-                    // Reset board cells
                     const restartCells = document.getElementsByClassName('cell');
                     for (let cell of restartCells) {
                         cell.textContent = '';
                     }
-                    
                     updateStatus();
                     document.getElementById('rematchBtn').style.display = 'none';
                     document.getElementById('rematchStatus').textContent = '';
-                    
-                    // Ensure game is interactive
                     setupBoard();
                     break;
 
@@ -239,14 +488,16 @@
                     break;
 
                 case 'playerDisconnected':
+                    clearInterval(turnTimerInterval); // clear interval turn timer
                     document.getElementById('status').textContent = data.message;
                     gameActive = false;
                     if (data.reset) {
                         resetBoard();
-                        // Clear player info and wait for new connection
+                        updateGameHistory(data.gameHistory, playerSymbol); // Update with empty history
                         document.getElementById('playerInfo').textContent = 'Waiting for opponent...';
                     }
                     break;
+
                 case 'rematchTimerStart':
                     startRematchTimer(data.timeout);
                     break;
@@ -267,75 +518,81 @@
                     document.getElementById('status').textContent = data.message;
                     resetBoard();
                     break;
-                
-                case 'waitingForReady':
-                    gameActive = false;
-                    document.getElementById('status').textContent = 'Waiting for both players to ready up';
-                    document.getElementById('rematchBtn').style.display = 'block';
-                    document.getElementById('rematchBtn').disabled = false;
-                    hasVotedRematch = false;
-                    break;
-                
-                case 'readyForRematch':
-                    if (hasVotedRematch) {
-                        gameActive = true;
-                        currentTurn = 'X'; // Reset to initial turn
-                        resetBoard();
-                        updateStatus();
-                        document.getElementById('rematchBtn').style.display = 'none';
-                        document.getElementById('rematchStatus').textContent = '';
-                    }
-                    break;
-                
-                case 'stopRematchTimer':
-                    clearRematchTimer();
-                    document.getElementById('rematchStatus').textContent = '';
-                    break;
             }
         }
 
-        function startRematchTimer(timeout) {
-            clearRematchTimer(); // Clear any existing timer
-            let timeLeft = timeout;
-            rematchTimerInterval = setInterval(() => {
+        function updateGameHistory(history, playerSymbol) {
+            const historyContainer = document.getElementById('historyItems');
+            historyContainer.innerHTML = '';
+            
+            history.forEach((game, index) => {
+                const span = document.createElement('span');
+                span.className = 'history-item';
+                
+                if (game.result === 'draw') {
+                    span.textContent = 'D';
+                    span.classList.add('history-draw');
+                } else if (game.result === playerSymbol) {
+                    span.textContent = 'W';
+                    span.classList.add('history-win');
+                } else {
+                    span.textContent = 'L';
+                    span.classList.add('history-lose');
+                }
+                
+                historyContainer.appendChild(span);
+            });
+        }
+
+        // add protocol turn timer
+        function updateTurnTimer(timeout = TURN_TIMEOUT) {
+            clearInterval(turnTimerInterval);
+            timeLeft = parseInt(timeout) || TURN_TIMEOUT;
+
+            const statusElement = document.getElementById('status');
+            const currentStatus = currentTurn === playerSymbol ? "Your turn" : "Opponent's turn";
+            
+            // Initial status update
+            statusElement.textContent = `${currentStatus} (${timeLeft}s)`;
+
+            turnTimerInterval = setInterval(() => {
                 timeLeft--;
-                document.getElementById('rematchStatus').textContent = 
-                    `Time remaining to vote for rematch: ${timeLeft} seconds`;
+                if (timeLeft >= 0) {
+                    statusElement.textContent = `${currentStatus} (${timeLeft}s)`;
+                }
                 
                 if (timeLeft <= 0) {
-                    clearRematchTimer();
-                    if (!hasVotedRematch) {
-                        document.getElementById('rematchStatus').textContent = 
-                            'Rematch time expired';
-                        document.getElementById('rematchBtn').style.display = 'none';
+                    isTimeout = true;
+                    clearInterval(turnTimerInterval);
+                    
+                    // Send timeout message to server
+                    ws.send(JSON.stringify({
+                        type: 'turnTimeout',
+                        player: playerSymbol
+                    }));
+                    
+                    // Disable all cells immediately
+                    const cells = document.getElementsByClassName('cell');
+                    for (let cell of cells) {
+                        cell.classList.add('disabled');
                     }
+                    
+                    gameActive = false;
                 }
             }, 1000);
         }
 
         function cellClickHandler(event) {
-            console.log('Cell clicked debug:');
-            console.log('Game Active:', gameActive);
-            console.log('Current Turn:', currentTurn);
-            console.log('Player Symbol:', playerSymbol);
-
-            // More explicit and comprehensive checks
-            if (!gameActive) {
-                console.log('Game is not active - detailed check');
-                console.trace(); // This will print the call stack
-                return;
-            }
-            
-            if (currentTurn !== playerSymbol) {
-                console.log('Not your turn');
-                return;
-            }
+            if (!gameActive || currentTurn !== playerSymbol || isTimeout) {
+        return;
+    }
             
             const cell = event.target;
             if (cell.textContent !== '') {
-                console.log('Cell already filled');
                 return;
             }
+
+            clearInterval(turnTimerInterval); // Clear timer when making a move
             
             ws.send(JSON.stringify({
                 type: 'move',
@@ -356,6 +613,25 @@
             }
         }
 
+        function startRematchTimer(timeout) {
+            clearRematchTimer();
+            let timeLeft = timeout;
+            rematchTimerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('rematchStatus').textContent = 
+                    `Time remaining to vote for rematch: ${timeLeft} seconds`;
+                
+                if (timeLeft <= 0) {
+                    clearRematchTimer();
+                    if (!hasVotedRematch) {
+                        document.getElementById('rematchStatus').textContent = 
+                            'Rematch time expired';
+                        document.getElementById('rematchBtn').style.display = 'none';
+                    }
+                }
+            }, 1000);
+        }
+
         function clearRematchTimer() {
             if (rematchTimerInterval) {
                 clearInterval(rematchTimerInterval);
@@ -372,42 +648,24 @@
             }
         }
 
-        function setupBoard() {
-            const cells = document.getElementsByClassName('cell');
-            for (let cell of cells) {
-                cell.addEventListener('click', cellClickHandler);
-            }
-
-            document.getElementById('rematchBtn').addEventListener('click', () => {
-                if (!hasVotedRematch) {
-                    ws.send(JSON.stringify({ type: 'rematchVote' }));
-                    hasVotedRematch = true;
-                    document.getElementById('rematchBtn').disabled = true;
-                }
-            });
-        }
-
         function resetBoard() {
+            clearInterval(turnTimerInterval);
+            isTimeout = false;
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
                 cell.textContent = '';
+                cell.classList.remove('disabled');
             }
-            
-            // Be explicit about game state
-            gameActive = false; // Default to false, but will be set to true during start/restart
+            gameActive = false;
             currentTurn = 'X';
             hasVotedRematch = false;
-            
             document.getElementById('rematchBtn').style.display = 'none';
             document.getElementById('rematchBtn').disabled = false;
             document.getElementById('rematchStatus').textContent = '';
             document.getElementById('status').textContent = 'Waiting for opponent...';
-            
             clearRematchTimer();
             setupBoard();
         }
-
-        init();
     </script>
 </body>
 </html>
