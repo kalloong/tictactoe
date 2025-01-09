@@ -363,17 +363,26 @@
         function setupBoard() {
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
+                // Remove existing event listeners to prevent duplicates
                 cell.removeEventListener('click', cellClickHandler);
+                // Add fresh event listener
                 cell.addEventListener('click', cellClickHandler);
+                // Ensure cell is not disabled
+                cell.classList.remove('disabled');
             }
 
-            document.getElementById('rematchBtn').addEventListener('click', () => {
-                if (!hasVotedRematch) {
-                    ws.send(JSON.stringify({ type: 'rematchVote' }));
-                    hasVotedRematch = true;
-                    document.getElementById('rematchBtn').disabled = true;
-                }
-            });
+            // Setup rematch button
+            const rematchBtn = document.getElementById('rematchBtn');
+            rematchBtn.removeEventListener('click', rematchBtnHandler);
+            rematchBtn.addEventListener('click', rematchBtnHandler);
+        }
+
+        function rematchBtnHandler() {
+            if (!hasVotedRematch) {
+                ws.send(JSON.stringify({ type: 'rematchVote' }));
+                hasVotedRematch = true;
+                document.getElementById('rematchBtn').disabled = true;
+            }
         }
 
         function handleMessage(data) {
@@ -472,13 +481,24 @@
                 case 'restart':
                     gameActive = true;
                     currentTurn = data.turn;
+                    isTimeout = false;  // Reset timeout flag
+                    
+                    // Reset all cells
                     const restartCells = document.getElementsByClassName('cell');
                     for (let cell of restartCells) {
                         cell.textContent = '';
+                        cell.classList.remove('disabled');  // Ensure disabled class is removed
                     }
+                    
+                    // Reset game state
                     updateStatus();
                     document.getElementById('rematchBtn').style.display = 'none';
                     document.getElementById('rematchStatus').textContent = '';
+                    
+                    // Start turn timer for new game
+                    updateTurnTimer(TURN_TIMEOUT);
+                    
+                    // Re-enable click handlers
                     setupBoard();
                     break;
 
@@ -651,11 +671,13 @@
         function resetBoard() {
             clearInterval(turnTimerInterval);
             isTimeout = false;
+            
             const cells = document.getElementsByClassName('cell');
             for (let cell of cells) {
                 cell.textContent = '';
-                cell.classList.remove('disabled');
+                cell.classList.remove('disabled');  // Ensure disabled class is removed
             }
+            
             gameActive = false;
             currentTurn = 'X';
             hasVotedRematch = false;
